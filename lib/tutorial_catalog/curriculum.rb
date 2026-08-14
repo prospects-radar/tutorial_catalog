@@ -29,10 +29,22 @@ module TutorialCatalog
       @default_locales
     end
 
+    # The declared tracks, in file order: [{ name:, titles:, members: }].
+    #
+    # `members` is the hand-written list beside the track. It is NOT what the
+    # catalog groups by — a leaf's own `tracks:` is, because a list kept
+    # somewhere else is exactly how content drifts out of reach. The list is
+    # kept so the checks can say when the two disagree.
+    def track_definitions
+      leaves # force the parse
+      @track_definitions
+    end
+
     def reload!
       @mutex.synchronize do
         @leaves = nil
         @default_locales = nil
+        @track_definitions = nil
       end
       self
     end
@@ -45,6 +57,7 @@ module TutorialCatalog
       document = load_document
       @default_locales = Array(document["default_locales"]).map(&:to_s)
       @default_locales = %w[en] if @default_locales.empty?
+      @track_definitions = track_definitions_from(document)
 
       flatten(document)
     rescue Psych::Exception => e
@@ -66,6 +79,18 @@ module TutorialCatalog
       end.freeze
     end
 
+    def track_definitions_from(document)
+      Array(document["tracks"]).filter_map do |track|
+        next unless track.is_a?(Hash) && track["name"]
+
+        {
+          name: track["name"].to_s,
+          titles: stringify(track["title"]),
+          members: Array(track["members"]).map(&:to_s).freeze
+        }.freeze
+      end.freeze
+    end
+
     def record(leaf, chapter, subchapter)
       {
         slug: leaf["slug"].to_s,
@@ -74,6 +99,7 @@ module TutorialCatalog
         scope: leaf["scope"],
         blocked: leaf["blocked"].to_s.strip != "",
         locales: leaf.key?("locales") ? Array(leaf["locales"]).map(&:to_s) : nil,
+        tracks: Array(leaf["tracks"]).map(&:to_s).freeze,
         anchors: anchors(leaf),
         chapter_number: chapter["number"],
         chapter_title: chapter["title"],

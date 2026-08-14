@@ -13,12 +13,16 @@ chapters:
             slug: first-leaf
             title: { en: First leaf, nl: Eerste }
             scope: What the first leaf covers.
+            tracks:
+              - onboarding
             pages:
               - route: prospects#index
           - number: 1.1.2
             slug: published-leaf
             title: { en: Published leaf, nl: Gepubliceerd }
             scope: A leaf with a rendered video.
+            tracks:
+              - onboarding
             pages:
               - route: prospects#index
       - number: '1.2'
@@ -37,6 +41,8 @@ chapters:
             scope: A leaf that will never exist in Dutch.
             locales:
               - en
+            tracks:
+              - dutch-gap
             pages:
               - route: prospects#index
           - number: 1.2.3
@@ -64,3 +70,17 @@ chapters:
             locales:
               - en
             pages: []
+tracks:
+  - name: onboarding
+    title: { en: Getting started, nl: Aan de slag }
+    members:
+      - first-leaf
+      - published-leaf
+  - name: dutch-gap
+    title: Only an English title
+    members:
+      - english-only
+  - name: drifted
+    title: { en: Drifted track }
+    members:
+      - first-leaf

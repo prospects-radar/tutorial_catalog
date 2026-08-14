@@ -17,12 +17,38 @@ module TutorialCatalog
     end
 
     # Every tutorial this locale can see, in course order.
-    def all(locale:)
-      resolved(locale.to_s)
+    #
+    # `track:` narrows to one subject. Narrowing does not renumber the course:
+    # a leaf's `prev_slug` and `next_slug` still point at its whole-course
+    # neighbours, so following them out of a track is possible and leaving the
+    # track is what a reader means by "next".
+    def all(locale:, track: nil)
+      tutorials = resolved(locale.to_s)
+      return tutorials if track.nil?
+
+      wanted = track.to_s
+      tutorials.select { |tutorial| tutorial.tracks.include?(wanted) }.freeze
     end
 
     def find(slug, locale:)
       resolved(locale.to_s).find { |tutorial| tutorial.slug == slug.to_s }
+    end
+
+    # The tracks worth offering this locale, in the order the curriculum lists
+    # them. A track no visible leaf belongs to is omitted rather than shown
+    # empty: a Dutch reader following a chip to nothing has been told the
+    # subject exists in their language, which is the promise this whole surface
+    # is built not to break.
+    def tracks(locale:)
+      wanted = locale.to_s
+      counts = all(locale: wanted).flat_map(&:tracks).tally
+
+      @curriculum.track_definitions.filter_map do |definition|
+        count = counts[definition[:name]]
+        next if count.nil?
+
+        Track.new(name: definition[:name], title: title_for(definition, wanted), count: count)
+      end.freeze
     end
 
     # Tutorials anchored to a page, in course order.
@@ -140,6 +166,7 @@ module TutorialCatalog
         locale: locale,
         page_key: leaf[:anchors].first&.[](:route),
         tab: leaf[:anchors].filter_map { |anchor| anchor[:tab] }.first,
+        tracks: leaf[:tracks],
         status: entry ? :watchable : :planned,
         url: entry && entry["url"],
         poster: entry && entry["poster"],
@@ -153,8 +180,9 @@ module TutorialCatalog
 
     # Falls back to English, never to the slug. Locale strictness is about
     # videos; a row with no words is worse than a row in the wrong language.
-    def title_for(leaf, locale)
-      titles = leaf[:titles]
+    # Takes anything carrying a `:titles` map — a leaf or a track definition.
+    def title_for(node, locale)
+      titles = node[:titles]
       titles[locale] || titles["en"] || titles.values.first
     end
 

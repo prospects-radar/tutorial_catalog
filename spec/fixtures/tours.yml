@@ -8,6 +8,11 @@ tours:
     pages:
       - route: product_wizard#show
         step: market
+  half_translated_help:
+    title: { en: Half translated, nl: Half vertaald }
+    pages:
+      - route: prospects#show
+
   internal_help:
     title: { en: Internal }
     pages:

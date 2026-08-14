@@ -19,6 +19,7 @@ RSpec.describe TutorialCatalog::Catalog do
     {
       "product_wizard_market_help" => [ { "title" => { "en" => "Market", "nl" => "Markt" } } ],
       "prospects_index_help" => [ { "title" => { "en" => "Prospects", "nl" => "Prospects" } } ],
+      "half_translated_help" => [ { "title" => { "en" => "Half translated" } } ],
       "english_only_help" => [ { "title" => { "en" => "English only" } } ]
     }
   end
@@ -166,6 +167,62 @@ RSpec.describe TutorialCatalog::Catalog do
     end
   end
 
+  describe "tracks" do
+    it "narrows #all to the leaves that declare the track, in course order" do
+      expect(build.all(locale: "en", track: "onboarding").map(&:slug))
+        .to eq(%w[first-leaf published-leaf])
+    end
+
+    it "keeps course-order neighbours whole rather than relative to the track" do
+      leaf = build.all(locale: "en", track: "dutch-gap").first
+
+      expect(leaf).to have_attributes(slug: "english-only", prev_slug: "no-dutch-title")
+    end
+
+    it "is empty for a track nothing declares" do
+      expect(build.all(locale: "en", track: "nonexistent")).to be_empty
+    end
+
+    it "never returns a leaf the locale cannot see" do
+      expect(build.all(locale: "nl", track: "dutch-gap")).to be_empty
+    end
+
+    it "carries the leaf's tracks on the value" do
+      expect(build.find("first-leaf", locale: "en").tracks).to eq(%w[onboarding])
+      expect(build.find("planned-leaf", locale: "en").tracks).to be_empty
+    end
+
+    describe "#tracks" do
+      it "returns the declared tracks with a title and a leaf count" do
+        expect(build.tracks(locale: "en").first)
+          .to have_attributes(name: "onboarding", title: "Getting started", count: 2)
+      end
+
+      it "resolves the track title for the locale" do
+        expect(build.tracks(locale: "nl").first.title).to eq("Aan de slag")
+      end
+
+      it "falls back to the English title, as leaf titles do" do
+        track = build.tracks(locale: "en").find { |t| t.name == "dutch-gap" }
+
+        expect(track.title).to eq("Only an English title")
+      end
+
+      it "omits a track no leaf this locale can see belongs to" do
+        expect(build.tracks(locale: "nl").map(&:name)).not_to include("dutch-gap")
+        expect(build.tracks(locale: "en").map(&:name)).to include("dutch-gap")
+      end
+
+      it "omits a track whose membership list no leaf agrees with" do
+        expect(build.tracks(locale: "en").map(&:name)).not_to include("drifted")
+      end
+
+      it "is empty when the curriculum declares no tracks" do
+        expect(build(curriculum: "trackless_curriculum.yml").tracks(locale: "en")).to be_empty
+      end
+    end
+  end
+
   describe "#for_page" do
     it "matches on controller#action" do
       slugs = build.for_page("prospects#index", locale: "en").map(&:slug)
@@ -279,6 +336,45 @@ RSpec.describe TutorialCatalog::Catalog do
       problems = build.problems(known_routes: all_fixture_routes)
 
       expect(problems.map(&:kind)).not_to include(:missing_anchor)
+    end
+
+    describe "which locales a journey exists in" do
+      it "names the locales an anchored journey is missing, as a warning" do
+        problem = problems_of_kind(:journey_locale_gap).find { |p| p.subject == "half_translated_help" }
+
+        expect(problem).to have_attributes(severity: :warning)
+        expect(problem.message).to include("en").and include("nl")
+      end
+
+      it "is quiet about a journey that exists in every locale the curriculum declares" do
+        expect(problems_of_kind(:journey_locale_gap).map(&:subject))
+          .not_to include("prospects_index_help")
+      end
+
+      it "reports an anchored journey the tour source does not define at all" do
+        expect(problems_of_kind(:unknown_journey).map(&:subject)).to include("internal_help")
+      end
+
+      it "keeps the title gap separate from the journey gap" do
+        expect(problems_of_kind(:untitled_tour).map(&:subject)).not_to include("half_translated_help")
+      end
+    end
+
+    describe "track membership" do
+      it "reports a track whose members list disagrees with the leaves, as a warning" do
+        problem = problems_of_kind(:track_membership_drift).find { |p| p.subject == "drifted" }
+
+        expect(problem).to have_attributes(severity: :warning)
+        expect(problem.message).to include("first-leaf")
+      end
+
+      it "is quiet about a track the two sources agree on" do
+        expect(problems_of_kind(:track_membership_drift).map(&:subject)).not_to include("onboarding")
+      end
+    end
+
+    def problems_of_kind(kind)
+      build.problems(known_routes: all_fixture_routes).select { |problem| problem.kind == kind }
     end
 
     def all_fixture_routes

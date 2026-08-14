@@ -21,6 +21,8 @@ module TutorialCatalog
       anchor_problems(curriculum, tours, known) +
         unanchored_journeys(tours) +
         untitled_tours(tours) +
+        journey_locale_gaps(curriculum, tours) +
+        track_membership_drift(curriculum) +
         orphan_videos(curriculum, manifest)
     end
 
@@ -79,6 +81,56 @@ module TutorialCatalog
 
         [ Problem.new(severity: :error, kind: :untitled_tour, subject: entry[:key],
                       message: "tour #{entry[:key]} exists in #{missing.join(', ')} but has no title there") ]
+      end
+    end
+
+    # Where each anchored journey actually exists, against the locales the
+    # curriculum declares. `untitled_tours` above asks whether the anchor file
+    # has a *label* for a locale; this asks whether the walkthrough itself was
+    # ever written there. Both can be true at once and they are fixed in
+    # different files, so they are reported apart.
+    #
+    # A journey the source does not define at all is the degenerate case —
+    # it exists nowhere — and gets its own kind, because the fix is to remove
+    # the anchor or write the tour rather than to translate anything.
+    def journey_locale_gaps(curriculum, tours)
+      declared = curriculum.default_locales
+
+      tours.entries.flat_map do |entry|
+        present = tours.journey_locales(entry[:key])
+
+        if present.empty?
+          [ Problem.new(severity: :warning, kind: :unknown_journey, subject: entry[:key],
+                        message: "tour #{entry[:key]} is anchored but no journey defines it") ]
+        elsif (missing = declared - present).any?
+          [ Problem.new(severity: :warning, kind: :journey_locale_gap, subject: entry[:key],
+                        message: "journey #{entry[:key]} exists in #{present.sort.join(', ')} " \
+                                 "but not in #{missing.sort.join(', ')}") ]
+        else
+          []
+        end
+      end
+    end
+
+    # A track's `members:` list is not what groups the leaves — a leaf's own
+    # `tracks:` is — so a stale list changes nothing a reader sees. It is still
+    # the shape of drift this whole surface exists to end, so it is reported
+    # rather than left to rot silently.
+    def track_membership_drift(curriculum)
+      actual = Hash.new { |hash, key| hash[key] = [] }
+      curriculum.leaves.each do |leaf|
+        leaf[:tracks].each { |name| actual[name] << leaf[:slug] }
+      end
+
+      curriculum.track_definitions.filter_map do |definition|
+        listed = definition[:members]
+        grouped = actual[definition[:name]]
+        difference = (listed - grouped) | (grouped - listed)
+        next if difference.empty?
+
+        Problem.new(severity: :warning, kind: :track_membership_drift, subject: definition[:name],
+                    message: "track #{definition[:name]} lists members that disagree with the " \
+                             "leaves' own tracks: #{difference.sort.join(', ')}")
       end
     end
 

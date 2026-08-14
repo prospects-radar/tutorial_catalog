@@ -17,7 +17,7 @@ module TutorialCatalog
   Tutorial = Data.define(
     :slug, :number, :title, :scope,
     :chapter_number, :chapter_title, :subchapter_number, :subchapter_title,
-    :locale, :page_key, :tab, :status,
+    :locale, :page_key, :tab, :tracks, :status,
     :url, :poster, :captions, :version, :duration,
     :prev_slug, :next_slug
   ) do
