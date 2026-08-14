@@ -57,12 +57,15 @@ module TutorialCatalog
     end
 
     # A journey the anchor file never names is authored content nobody can
-    # reach — the exact failure this whole surface exists to end.
+    # reach — the exact failure this whole surface exists to end. Reported as a
+    # warning rather than an error, because it is the status quo for content
+    # that predates anchoring: promoting it to an error would fail the build on
+    # tours nobody has decided the fate of yet.
     def unanchored_journeys(tours)
       anchored = tours.keys.to_set
 
       (tours.known_journeys - anchored.to_a).sort.map do |key|
-        Problem.new(severity: :error, kind: :unanchored_journey, subject: key,
+        Problem.new(severity: :warning, kind: :unanchored_journey, subject: key,
                     message: "journey #{key} is not anchored, so nothing can offer it")
       end
     end
