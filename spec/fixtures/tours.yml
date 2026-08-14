@@ -1,0 +1,14 @@
+tours:
+  prospects_index_help:
+    title: { en: Prospects tour, nl: Prospects rondleiding }
+    pages:
+      - route: prospects#index
+  product_wizard_market_help:
+    title: { en: The market step, nl: De marktstap }
+    pages:
+      - route: product_wizard#show
+        step: market
+  internal_help:
+    title: { en: Internal }
+    pages:
+      - route: internal_only#index

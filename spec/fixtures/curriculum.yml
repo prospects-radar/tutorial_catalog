@@ -1,0 +1,66 @@
+version: 1
+default_locales:
+  - en
+  - nl
+chapters:
+  - number: 1
+    title: First chapter
+    subchapters:
+      - number: '1.1'
+        title: First subchapter
+        leaves:
+          - number: 1.1.1
+            slug: first-leaf
+            title: { en: First leaf, nl: Eerste }
+            scope: What the first leaf covers.
+            pages:
+              - route: prospects#index
+          - number: 1.1.2
+            slug: published-leaf
+            title: { en: Published leaf, nl: Gepubliceerd }
+            scope: A leaf with a rendered video.
+            pages:
+              - route: prospects#index
+      - number: '1.2'
+        title: Second subchapter
+        leaves:
+          - number: 1.2.1
+            slug: no-dutch-title
+            title: { en: No Dutch title }
+            scope: A leaf whose Dutch title is not written yet.
+            pages:
+              - route: prospects#show
+                tab: scoring
+          - number: 1.2.2
+            slug: english-only
+            title: { en: English only }
+            scope: A leaf that will never exist in Dutch.
+            locales:
+              - en
+            pages:
+              - route: prospects#index
+          - number: 1.2.3
+            slug: blocked-leaf
+            title: { en: Blocked leaf }
+            scope: A leaf the demo world cannot film yet.
+            blocked: needs seeded tasks
+            pages:
+              - route: prospects#index
+  - number: 2
+    title: Second chapter
+    subchapters:
+      - number: '2.1'
+        title: Only subchapter
+        leaves:
+          - number: 2.1.1
+            slug: planned-leaf
+            title: { en: Planned leaf, nl: Gepland }
+            scope: A leaf with no video yet.
+            pages: []
+          - number: 2.1.2
+            slug: no-duration
+            title: { en: No duration }
+            scope: Published before durations were recorded.
+            locales:
+              - en
+            pages: []
