@@ -138,6 +138,7 @@ module TutorialCatalog
         subchapter_number: leaf[:subchapter_number],
         subchapter_title: leaf[:subchapter_title],
         locale: locale,
+        page_key: leaf[:anchors].first&.[](:route),
         tab: leaf[:anchors].filter_map { |anchor| anchor[:tab] }.first,
         status: entry ? :watchable : :planned,
         url: entry && entry["url"],

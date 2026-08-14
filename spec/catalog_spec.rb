@@ -184,6 +184,14 @@ RSpec.describe TutorialCatalog::Catalog do
       expect(leaves.first.tab).to eq("scoring")
     end
 
+    it "carries the first anchor on the value, for deep links to land on" do
+      expect(build.find("published-leaf", locale: "en").page_key).to eq("prospects#index")
+    end
+
+    it "leaves page_key nil for a leaf that teaches no page of ours" do
+      expect(build.find("planned-leaf", locale: "en").page_key).to be_nil
+    end
+
     it "is empty for a page nothing anchors to" do
       expect(build.for_page("nowhere#index", locale: "en")).to be_empty
     end
