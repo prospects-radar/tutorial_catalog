@@ -438,7 +438,141 @@ RSpec.describe TutorialCatalog::Catalog do
     end
   end
 
+  # Every public list is frozen, so a caller never has to know which ones are
+  # the cached array and which were built for this call.
+  describe "what callers get back" do
+    it "hands out frozen lists" do
+      catalog = build
+
+      expect(catalog.all(locale: "en")).to be_frozen
+      expect(catalog.all(locale: "en", track: "onboarding")).to be_frozen
+      expect(catalog.for_page("prospects#index", locale: "en")).to be_frozen
+      expect(catalog.tracks(locale: "en")).to be_frozen
+      expect(catalog.tours_for_page("prospects#index", locale: "en")).to be_frozen
+      expect(catalog.problems(known_routes: [])).to be_frozen
+    end
+  end
+
+  describe "a malformed manifest" do
+    it "says so, rather than reporting nothing watchable in silence" do
+      announced = []
+      catalog = described_class.new(
+        curriculum_path: fixture("curriculum.yml"), tours_path: nil,
+        manifest_path: fixture("truncated_manifest.json"), journeys: {},
+        on_manifest_malformed: ->(path, error) { announced << [ path, error ] }
+      )
+
+      catalog.all(locale: "en")
+
+      expect(announced.size).to eq(1)
+      expect(announced.first.last).to be_a(StandardError)
+    end
+
+    it "does not repeat itself while the same broken file sits there" do
+      announced = []
+      catalog = described_class.new(
+        curriculum_path: fixture("curriculum.yml"), tours_path: nil,
+        manifest_path: fixture("truncated_manifest.json"), journeys: {},
+        on_manifest_malformed: ->(*) { announced << :warned }
+      )
+
+      3.times { catalog.all(locale: "en") }
+
+      expect(announced.size).to eq(1)
+    end
+
+    # The retry is the point: a truncated file is an ordinary artifact of
+    # writing over a live mount, so the next read has to see the finished one.
+    it "picks up the file once it is written properly" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "manifest.json")
+        File.write(path, '{"videos": {"published-leaf"')
+        catalog = described_class.new(curriculum_path: fixture("curriculum.yml"), tours_path: nil,
+                                      manifest_path: path, journeys: {})
+        expect(catalog.find("published-leaf", locale: "en")).not_to be_watchable
+
+        File.write(path, File.read(fixture("manifest.json")))
+
+        expect(catalog.find("published-leaf", locale: "en")).to be_watchable
+      end
+    end
+  end
+
+  # Production and test hold the parse for the life of the process: the file is
+  # committed and cannot change under them. Development edits it constantly, and
+  # a reader who has to remember `reload!` will not.
+  describe "a curriculum edited underneath a running process" do
+    def with_curriculum
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "tutorials.yml")
+        FileUtils.cp(fixture("curriculum.yml"), path)
+        yield path, ->(**opts) {
+          described_class.new(curriculum_path: path, tours_path: nil, manifest_path: nil,
+                              journeys: {}, **opts)
+        }
+      end
+    end
+
+    def rename_first_chapter(path)
+      File.write(path, File.read(path).sub("First chapter", "Renamed chapter"))
+      File.utime(Time.now + 1, Time.now + 1, path)
+    end
+
+    it "is held when the caller did not ask it to watch" do
+      with_curriculum do |path, catalog_for|
+        catalog = catalog_for.call
+        expect(catalog.all(locale: "en").first.chapter_title).to eq("First chapter")
+
+        rename_first_chapter(path)
+
+        expect(catalog.all(locale: "en").first.chapter_title).to eq("First chapter")
+      end
+    end
+
+    it "is re-read when the caller asked it to watch" do
+      with_curriculum do |path, catalog_for|
+        catalog = catalog_for.call(watch_curriculum: true)
+        expect(catalog.all(locale: "en").first.chapter_title).to eq("First chapter")
+
+        rename_first_chapter(path)
+
+        expect(catalog.all(locale: "en").first.chapter_title).to eq("Renamed chapter")
+      end
+    end
+
+    it "still raises on a curriculum edited into something unparseable" do
+      with_curriculum do |path, catalog_for|
+        catalog = catalog_for.call(watch_curriculum: true)
+        catalog.all(locale: "en")
+
+        File.write(path, "\tnot: [valid")
+        File.utime(Time.now + 1, Time.now + 1, path)
+
+        expect { catalog.all(locale: "en") }.to raise_error(TutorialCatalog::CurriculumError)
+      end
+    end
+  end
+
   describe "#reload!" do
+    # The anchor map used to be memoised with `||=` and never cleared here, so
+    # a reload re-read the curriculum and then went on matching pages against
+    # the anchors it had already thrown away.
+    it "re-reads the page anchors too, not only the leaves" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "tutorials.yml")
+        FileUtils.cp(fixture("curriculum.yml"), path)
+        catalog = described_class.new(curriculum_path: path, tours_path: nil,
+                                      manifest_path: nil, journeys: {})
+        expect(catalog.for_page("prospects#index", locale: "en")).not_to be_empty
+
+        File.write(path, File.read(path).gsub("route: prospects#index", "route: moved#somewhere"))
+        catalog.reload!
+
+        expect(catalog.for_page("prospects#index", locale: "en")).to be_empty
+        expect(catalog.for_page("moved#somewhere", locale: "en")).not_to be_empty
+      end
+    end
+
     it "re-reads a curriculum edited underneath it" do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "tutorials.yml")

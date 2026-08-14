@@ -7,21 +7,37 @@ module TutorialCatalog
   #
   # Parsed lazily on first use — a process that never asks about tutorials should
   # not pay for a few thousand lines of YAML — then held for the life of the
-  # object. The file is committed and changes only on deploy, so there is nothing
-  # to invalidate; callers who edit it in development call `reload!`.
+  # object. The file is committed and changes only on deploy, so in production
+  # and test there is nothing to invalidate.
+  #
+  # `watch:` is for development, where the file is edited constantly and a
+  # reader who has to remember `reload!` will not: the parse is then re-checked
+  # against the file's mtime and size, the same way the manifest is. It is off
+  # by default because a stat on every read buys nothing once the file can no
+  # longer change.
   #
   # A leaf record is a plain Hash with symbol keys. It is deliberately not a
   # Tutorial: a Tutorial is locale-resolved and status-joined, and neither of
   # those is knowable here.
   class Curriculum
-    def initialize(path)
+    Stat = Struct.new(:mtime, :size)
+
+    def initialize(path, watch: false)
       @path = path
+      @watch = watch
       @mutex = Mutex.new
     end
 
     # Every leaf, in the order the file lists them, which is course order.
     def leaves
-      @leaves || @mutex.synchronize { @leaves ||= parse }
+      return @leaves if @leaves && !stale?
+
+      @mutex.synchronize do
+        next @leaves if @leaves && !stale?
+
+        @loaded_stat = stat
+        @leaves = parse
+      end
     end
 
     def default_locales
@@ -45,11 +61,20 @@ module TutorialCatalog
         @leaves = nil
         @default_locales = nil
         @track_definitions = nil
+        @loaded_stat = nil
       end
       self
     end
 
     private
+
+    def stale? = @watch && stat != @loaded_stat
+
+    def stat
+      return nil unless @path && File.exist?(@path)
+
+      Stat.new(File.mtime(@path), File.size(@path))
+    end
 
     def parse
       raise CurriculumError, "no curriculum at #{@path}" unless @path && File.exist?(@path)

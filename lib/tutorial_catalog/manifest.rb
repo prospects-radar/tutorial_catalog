@@ -21,9 +21,10 @@ module TutorialCatalog
   class Manifest
     Stat = Struct.new(:mtime, :size)
 
-    def initialize(path, on_absent: nil)
+    def initialize(path, on_absent: nil, on_malformed: nil)
       @path = path
       @on_absent = on_absent
+      @on_malformed = on_malformed
       @mutex = Mutex.new
       reset
     end
@@ -63,6 +64,7 @@ module TutorialCatalog
       @loaded = false
       @loaded_stat = nil
       @announced_absent = false
+      @announced_malformed_stat = nil
     end
 
     def stat
@@ -79,8 +81,20 @@ module TutorialCatalog
       document = JSON.parse(File.read(@path))
       videos = document["videos"]
       videos.is_a?(Hash) ? videos.freeze : {}.freeze
-    rescue JSON::ParserError, SystemCallError
+    rescue JSON::ParserError, SystemCallError => e
+      malformed(current, e)
       nil
+    end
+
+    # Said once per broken version of the file rather than once per read: a
+    # process asking on every request would otherwise fill the log with the same
+    # line, and saying nothing at all would leave a corrupt manifest looking
+    # exactly like a host that has never published a video.
+    def malformed(current, error)
+      return if @announced_malformed_stat == current
+
+      @announced_malformed_stat = current
+      @on_malformed&.call(@path, error)
     end
 
     def absent

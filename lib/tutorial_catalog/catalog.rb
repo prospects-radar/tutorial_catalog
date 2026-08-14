@@ -8,10 +8,14 @@ module TutorialCatalog
   # Locale is part of every question. There is no "any locale" query, so an
   # English video cannot leak to a Dutch reader.
   class Catalog
-    def initialize(curriculum_path:, tours_path: nil, manifest_path: nil, journeys: {}, on_manifest_absent: nil)
-      @curriculum = Curriculum.new(curriculum_path)
+    EMPTY_ROUTES = Set.new.freeze
+
+    def initialize(curriculum_path:, tours_path: nil, manifest_path: nil, journeys: {},
+                   on_manifest_absent: nil, on_manifest_malformed: nil, watch_curriculum: false)
+      @curriculum = Curriculum.new(curriculum_path, watch: watch_curriculum)
       @tours = Tours.new(tours_path, journeys: journeys)
-      @manifest = Manifest.new(manifest_path, on_absent: on_manifest_absent)
+      @manifest = Manifest.new(manifest_path, on_absent: on_manifest_absent,
+                                              on_malformed: on_manifest_malformed)
       @mutex = Mutex.new
       @by_locale = {}
     end
@@ -51,9 +55,10 @@ module TutorialCatalog
     # selects a tab is not sent to the server.
     def for_page(page_key, locale:, track: nil)
       key = page_key.to_s
-      anchored = resolved(locale.to_s).select { |tutorial| anchor_routes(tutorial.slug).include?(key) }
+      routes = anchor_routes
+      anchored = resolved(locale.to_s).select { |tutorial| routes.fetch(tutorial.slug, EMPTY_ROUTES).include?(key) }
 
-      narrow(anchored, track)
+      narrow(anchored, track).freeze
     end
 
     # What a library page shows: the whole curriculum, or what teaches one page,
@@ -87,12 +92,12 @@ module TutorialCatalog
         next if title.nil?
 
         Tour.new(key: entry[:key], title: title, locale: wanted_locale)
-      end
+      end.freeze
     end
 
     def problems(known_routes:)
       Validation.problems(curriculum: @curriculum, tours: @tours, manifest: @manifest,
-                          known_routes: known_routes)
+                          known_routes: known_routes).freeze
     end
 
     def reload!
@@ -134,21 +139,26 @@ module TutorialCatalog
 
     # Resolved values are cached per locale, keyed off the manifest's current
     # state so a publish is picked up without a restart.
+    # Keyed off both sources by identity. A re-parse hands back a new frozen
+    # array, so an unchanged one is the same object and costs a comparison —
+    # and a curriculum edited under a watching process invalidates this cache
+    # rather than being resolved once and remembered forever.
     def resolved(locale)
       videos = @manifest.videos
+      leaves = @curriculum.leaves
 
       @mutex.synchronize do
         cached = @by_locale[locale]
-        next cached[:tutorials] if cached && cached[:videos].equal?(videos)
+        next cached[:tutorials] if cached && cached[:videos].equal?(videos) && cached[:leaves].equal?(leaves)
 
-        tutorials = build(locale, videos)
-        @by_locale[locale] = { videos: videos, tutorials: tutorials }
+        tutorials = build(locale, videos, leaves)
+        @by_locale[locale] = { videos: videos, leaves: leaves, tutorials: tutorials }
         tutorials
       end
     end
 
-    def build(locale, videos)
-      visible = @curriculum.leaves.select { |leaf| visible?(leaf, locale) }
+    def build(locale, videos, leaves)
+      visible = leaves.select { |leaf| visible?(leaf, locale) }
 
       visible.each_with_index.map do |leaf, index|
         previous = index.zero? ? nil : visible[index - 1]
@@ -209,11 +219,18 @@ module TutorialCatalog
       titles[locale] || titles["en"] || titles.values.first
     end
 
-    def anchor_routes(slug)
-      @anchor_routes ||= @curriculum.leaves.to_h do |leaf|
+    # Rebuilt whenever the parse behind it changes, for the same reason the
+    # resolved cache is. Built once per call rather than per leaf, since
+    # `for_page` asks about every tutorial in the locale.
+    def anchor_routes
+      leaves = @curriculum.leaves
+      return @anchor_routes if @anchor_routes_for.equal?(leaves)
+
+      @anchor_routes = leaves.to_h do |leaf|
         [ leaf[:slug], leaf[:anchors].map { |anchor| anchor[:route] }.to_set ]
-      end
-      @anchor_routes.fetch(slug, Set.new)
+      end.freeze
+      @anchor_routes_for = leaves
+      @anchor_routes
     end
   end
 end
