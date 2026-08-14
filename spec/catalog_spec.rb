@@ -27,7 +27,7 @@ RSpec.describe TutorialCatalog::Catalog do
     it "returns every leaf the locale can see, in course order" do
       numbers = build.all(locale: "en").map(&:number)
 
-      expect(numbers).to eq(%w[1.1.1 1.1.2 1.2.1 2.1.1])
+      expect(numbers).to eq(%w[1.1.1 1.1.2 1.2.1 1.2.2 2.1.1 2.1.2])
     end
 
     it "drops a leaf whose declared locales exclude the requested one" do
@@ -170,11 +170,11 @@ RSpec.describe TutorialCatalog::Catalog do
     it "matches on controller#action" do
       slugs = build.for_page("prospects#index", locale: "en").map(&:slug)
 
-      expect(slugs).to contain_exactly("first-leaf", "published-leaf")
+      expect(slugs).to contain_exactly("first-leaf", "published-leaf", "english-only")
     end
 
     it "returns them in course order" do
-      expect(build.for_page("prospects#index", locale: "en").map(&:number)).to eq(%w[1.1.1 1.1.2])
+      expect(build.for_page("prospects#index", locale: "en").map(&:number)).to eq(%w[1.1.1 1.1.2 1.2.2])
     end
 
     it "carries the tab qualifier through without narrowing the match" do
@@ -249,7 +249,7 @@ RSpec.describe TutorialCatalog::Catalog do
     end
 
     it "reports an anchor inside an internal namespace" do
-      problems = build.problems(known_routes: all_fixture_routes + [ "api/v1/things#index" ])
+      problems = build.problems(known_routes: all_fixture_routes)
 
       expect(problems.map(&:kind)).to include(:internal_namespace)
     end
@@ -274,7 +274,7 @@ RSpec.describe TutorialCatalog::Catalog do
     end
 
     def all_fixture_routes
-      %w[prospects#index prospects#show product_wizard#show internal_only#index]
+      %w[prospects#index prospects#show product_wizard#show api/v1/things#index]
     end
   end
 

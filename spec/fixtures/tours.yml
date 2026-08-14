@@ -11,4 +11,4 @@ tours:
   internal_help:
     title: { en: Internal }
     pages:
-      - route: internal_only#index
+      - route: api/v1/things#index
