@@ -4,10 +4,10 @@ default_locales:
   - nl
 chapters:
   - number: 1
-    title: First chapter
+    title: { en: First chapter, nl: Eerste hoofdstuk }
     subchapters:
       - number: '1.1'
-        title: First subchapter
+        title: { en: First subchapter, nl: Eerste subhoofdstuk }
         leaves:
           - number: 1.1.1
             slug: first-leaf

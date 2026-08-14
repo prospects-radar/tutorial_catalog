@@ -102,9 +102,9 @@ module TutorialCatalog
         tracks: Array(leaf["tracks"]).map(&:to_s).freeze,
         anchors: anchors(leaf),
         chapter_number: chapter["number"],
-        chapter_title: chapter["title"],
+        chapter_titles: stringify(chapter["title"]),
         subchapter_number: subchapter["number"].to_s,
-        subchapter_title: subchapter["title"]
+        subchapter_titles: stringify(subchapter["title"])
       }.freeze
     end
 

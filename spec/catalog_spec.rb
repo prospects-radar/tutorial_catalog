@@ -50,6 +50,23 @@ RSpec.describe TutorialCatalog::Catalog do
         subchapter_number: "1.1", subchapter_title: "First subchapter"
       )
     end
+
+    # The rail and every pane heading are built from these, so a reader whose
+    # leaf titles are translated but whose chapter labels are not still reads a
+    # half-English library.
+    it "resolves the chapter and subchapter labels for the locale" do
+      leaf = build.all(locale: "nl").first
+
+      expect(leaf).to have_attributes(
+        chapter_title: "Eerste hoofdstuk", subchapter_title: "Eerste subhoofdstuk"
+      )
+    end
+
+    it "falls back to English for a chapter label the locale has no title for" do
+      leaf = build.all(locale: "nl").find { |tutorial| tutorial.chapter_number == 2 }
+
+      expect(leaf.chapter_title).to eq("Second chapter")
+    end
   end
 
   describe "titles" do
@@ -255,6 +272,45 @@ RSpec.describe TutorialCatalog::Catalog do
 
     it "never returns a leaf the locale cannot see" do
       expect(build.for_page("prospects#index", locale: "nl").map(&:slug)).not_to include("english-only")
+    end
+
+    it "narrows to a track without loosening the anchor match" do
+      slugs = build.for_page("prospects#index", locale: "en", track: "onboarding").map(&:slug)
+
+      expect(slugs).to eq(%w[first-leaf published-leaf])
+    end
+  end
+
+  # One entry point for the library's filters, so "does this leaf belong to this
+  # track" has a single implementation rather than one per caller.
+  describe "#browse" do
+    it "is the whole curriculum when neither filter is given" do
+      expect(build.browse(locale: "en")).to eq(build.all(locale: "en"))
+    end
+
+    it "narrows to a page" do
+      expect(build.browse(page_key: "prospects#index", locale: "en"))
+        .to eq(build.for_page("prospects#index", locale: "en"))
+    end
+
+    it "narrows to a track" do
+      expect(build.browse(track: "onboarding", locale: "en"))
+        .to eq(build.all(locale: "en", track: "onboarding"))
+    end
+
+    it "composes a page filter with a track filter" do
+      expect(build.browse(page_key: "prospects#index", track: "dutch-gap", locale: "en").map(&:slug))
+        .to eq(%w[english-only])
+    end
+
+    # Both filters reach this object off a query string, where an absent
+    # parameter and a present-but-empty one are the same question.
+    it "treats an empty filter as no filter" do
+      expect(build.browse(page_key: "", track: "", locale: "en")).to eq(build.all(locale: "en"))
+    end
+
+    it "is empty when the two filters have nothing in common" do
+      expect(build.browse(page_key: "prospects#show", track: "onboarding", locale: "en")).to be_empty
     end
   end
 

@@ -16,18 +16,10 @@ module TutorialCatalog
       @by_locale = {}
     end
 
-    # Every tutorial this locale can see, in course order.
-    #
-    # `track:` narrows to one subject. Narrowing does not renumber the course:
-    # a leaf's `prev_slug` and `next_slug` still point at its whole-course
-    # neighbours, so following them out of a track is possible and leaving the
-    # track is what a reader means by "next".
+    # Every tutorial this locale can see, in course order. `track:` narrows to
+    # one subject — see `narrow`, which is where that means anything.
     def all(locale:, track: nil)
-      tutorials = resolved(locale.to_s)
-      return tutorials if track.nil?
-
-      wanted = track.to_s
-      tutorials.select { |tutorial| tutorial.tracks.include?(wanted) }.freeze
+      narrow(resolved(locale.to_s), track)
     end
 
     def find(slug, locale:)
@@ -57,9 +49,26 @@ module TutorialCatalog
     # what the curriculum stores, byte for byte. A `tab:` qualifier rides along
     # on the returned value but never narrows the match: the fragment that
     # selects a tab is not sent to the server.
-    def for_page(page_key, locale:)
+    def for_page(page_key, locale:, track: nil)
       key = page_key.to_s
-      resolved(locale.to_s).select { |tutorial| anchor_routes(tutorial.slug).include?(key) }
+      anchored = resolved(locale.to_s).select { |tutorial| anchor_routes(tutorial.slug).include?(key) }
+
+      narrow(anchored, track)
+    end
+
+    # What a library page shows: the whole curriculum, or what teaches one page,
+    # or one subject, or a page narrowed to a subject.
+    #
+    # It lives here rather than in the caller so that "does this leaf belong to
+    # this track" has exactly one implementation. The two filters are not the
+    # same kind of thing — an anchor is a property of the leaf's page, a track
+    # is a property of the leaf — but they compose, and a caller that composed
+    # them itself would be a second answer to a question this object already
+    # answers.
+    def browse(page_key: nil, track: nil, locale:)
+      return for_page(page_key, locale: locale, track: track) if page_key.to_s != ""
+
+      all(locale: locale, track: track)
     end
 
     # Tours anchored to a page, in file order.
@@ -95,6 +104,17 @@ module TutorialCatalog
     end
 
     private
+
+    # The one place that knows what track membership means. Narrowing does not
+    # renumber the course: a leaf's `prev_slug` and `next_slug` still point at
+    # its whole-course neighbours, so following them out of a track is possible,
+    # and leaving the track is what a reader means by "next".
+    def narrow(tutorials, track)
+      wanted = track.to_s
+      return tutorials if wanted == ""
+
+      tutorials.select { |tutorial| tutorial.tracks.include?(wanted) }.freeze
+    end
 
     def matches_step?(anchor, key, wanted_step)
       return false unless anchor[:route] == key
@@ -160,9 +180,9 @@ module TutorialCatalog
         title: title_for(leaf, locale),
         scope: leaf[:scope],
         chapter_number: leaf[:chapter_number],
-        chapter_title: leaf[:chapter_title],
+        chapter_title: resolve(leaf[:chapter_titles], locale),
         subchapter_number: leaf[:subchapter_number],
-        subchapter_title: leaf[:subchapter_title],
+        subchapter_title: resolve(leaf[:subchapter_titles], locale),
         locale: locale,
         page_key: leaf[:anchors].first&.[](:route),
         tab: leaf[:anchors].filter_map { |anchor| anchor[:tab] }.first,
@@ -181,8 +201,11 @@ module TutorialCatalog
     # Falls back to English, never to the slug. Locale strictness is about
     # videos; a row with no words is worse than a row in the wrong language.
     # Takes anything carrying a `:titles` map — a leaf or a track definition.
-    def title_for(node, locale)
-      titles = node[:titles]
+    def title_for(node, locale) = resolve(node[:titles], locale)
+
+    # Every piece of authored text on this surface resolves the same way, so a
+    # translated leaf cannot end up sitting under an untranslated chapter.
+    def resolve(titles, locale)
       titles[locale] || titles["en"] || titles.values.first
     end
 
