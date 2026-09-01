@@ -1,6 +1,13 @@
 {
   "generated_at": "2026-08-14T10:00:00+02:00",
   "videos": {
+    "first-leaf": {
+      "en": { "url": "/tutorials/first-leaf_en.mp4?v=e1", "bytes": 1, "version": "e1", "duration": 60 },
+      "nl": { "url": "/tutorials/first-leaf_nl.mp4?v=n1", "bytes": 1, "version": "n1", "duration": 62 }
+    },
+    "no-dutch-title": {
+      "nl": { "url": "/tutorials/no-dutch-title_nl.mp4?v=n2", "bytes": 1, "version": "n2" }
+    },
     "published-leaf": {
       "en": {
         "url": "/tutorials/published-leaf_en.mp4?v=abc123",

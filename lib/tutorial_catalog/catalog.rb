@@ -5,17 +5,29 @@ require "set"
 module TutorialCatalog
   # The one door. Every surface reads through this and no other.
   #
-  # Locale is part of every question. There is no "any locale" query, so an
-  # English video cannot leak to a Dutch reader.
+  # Locale is part of every question. There is still no "any locale" query: the
+  # curriculum decides which leaves a language sees, and a leaf it declares
+  # English-only stays out of the Dutch library entirely.
+  #
+  # What does cross the line is the file. A leaf declared in both languages but
+  # rendered in only one is watchable in both, playing the `fallback_locale:`
+  # render where its own is missing — the alternative is a "coming soon" row for
+  # a video that exists, which is a worse answer to "teach me this page" than
+  # subtitled English. The Tutorial says which language it ended up in, so the
+  # surface can mark it.
   class Catalog
     EMPTY_ROUTES = Set.new.freeze
 
     def initialize(curriculum_path:, tours_path: nil, manifest_path: nil, journeys: {},
-                   on_manifest_absent: nil, on_manifest_malformed: nil, watch_curriculum: false)
+                   on_manifest_absent: nil, on_manifest_malformed: nil, watch_curriculum: false,
+                   fallback_locale: "en")
       @curriculum = Curriculum.new(curriculum_path, watch: watch_curriculum)
       @tours = Tours.new(tours_path, journeys: journeys)
       @manifest = Manifest.new(manifest_path, on_absent: on_manifest_absent,
                                               on_malformed: on_manifest_malformed)
+      # Nil turns the fallback off, and so does an empty string — this is
+      # configuration, and configuration arrives blank.
+      @fallback_locale = fallback_locale.to_s == "" ? nil : fallback_locale.to_s
       @mutex = Mutex.new
       @by_locale = {}
     end
@@ -182,7 +194,7 @@ module TutorialCatalog
     end
 
     def tutorial(leaf, locale, videos, prev_slug:, next_slug:)
-      entry = videos.dig(leaf[:slug], locale)
+      entry, media_locale = media(videos, leaf[:slug], locale)
 
       Tutorial.new(
         slug: leaf[:slug],
@@ -194,6 +206,7 @@ module TutorialCatalog
         subchapter_number: leaf[:subchapter_number],
         subchapter_title: resolve(leaf[:subchapter_titles], locale),
         locale: locale,
+        media_locale: media_locale,
         page_key: leaf[:anchors].first&.[](:route),
         tab: leaf[:anchors].filter_map { |anchor| anchor[:tab] }.first,
         tracks: leaf[:tracks],
@@ -208,8 +221,30 @@ module TutorialCatalog
       )
     end
 
-    # Falls back to English, never to the slug. Locale strictness is about
-    # videos; a row with no words is worse than a row in the wrong language.
+    # Which file this leaf plays for this reader, and what language it is in.
+    #
+    # Their own language first, always: a Dutch render is what a Dutch reader
+    # asked for, and it wins even when both exist. The fallback is reached only
+    # where their own is absent, which is the state a render sweep passes
+    # through — English lands first and Dutch follows a day later, and for that
+    # day the leaf teaches rather than promising.
+    #
+    # Returns [nil, locale] when neither exists, which is a planned leaf: there
+    # is no file, so the only honest answer to "what language is it in" is the
+    # one the reader asked for.
+    def media(videos, slug, locale)
+      own = videos.dig(slug, locale)
+      return [ own, locale ] if own
+      return [ nil, locale ] if @fallback_locale.nil? || @fallback_locale == locale
+
+      borrowed = videos.dig(slug, @fallback_locale)
+      borrowed ? [ borrowed, @fallback_locale ] : [ nil, locale ]
+    end
+
+    # Falls back to English, never to the slug: a row with no words is worse
+    # than a row in the wrong language. Unlike the video fallback, this one is
+    # silent — an untranslated title is an authoring gap to be filled, not a
+    # fact about the leaf worth telling the reader.
     # Takes anything carrying a `:titles` map — a leaf or a track definition.
     def title_for(node, locale) = resolve(node[:titles], locale)
 

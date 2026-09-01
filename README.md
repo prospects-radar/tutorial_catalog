@@ -28,12 +28,23 @@ catalog.problems(known_routes: routes)                  # => [Problem]
 
 ## Locale is part of every question
 
-There is no "any locale" query, so an English video cannot leak to a Dutch
-reader. A leaf whose `locales:` omits the requested one is **absent**, not shown
-as coming soon — the curriculum is saying that video will never exist in that
-language, and promising it anyway would be a lie. Titles are the exception: a
-missing translation falls back to English, because a row with no words is worse
-than a row in the wrong language.
+There is no "any locale" query. A leaf whose `locales:` omits the requested one
+is **absent**, not shown as coming soon — the curriculum is saying that video
+will never exist in that language, and promising it anyway would be a lie.
+Titles are the exception: a missing translation falls back to English, because a
+row with no words is worse than a row in the wrong language.
+
+## Files fall back; leaves do not
+
+A leaf the curriculum declares in Dutch, rendered in English but not yet in
+Dutch, is watchable for a Dutch reader — playing the English file. `fallback_locale:`
+sets which language is borrowed (`"en"` by default; `nil` turns it off). Their own
+language always wins where it exists.
+
+The Tutorial keeps the two apart: `locale` is what the reader asked for and what
+every label was resolved for, `media_locale` is what the file is actually in, and
+`fallback_media?` is true when they differ. Say so on the surface — a reader who
+pressed play on a Dutch row should not be surprised by English narration.
 
 ## The two files fail differently, on purpose
 

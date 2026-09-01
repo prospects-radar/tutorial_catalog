@@ -14,14 +14,31 @@ module TutorialCatalog
   # `url`, `poster`, `captions`, `version` and `duration` are nil unless the
   # video is watchable — and `poster`, `captions` and `duration` may be nil even
   # then, because the publish step only records what it actually found.
+  #
+  # `locale` is the reader's language: the one the title, the chapter label and
+  # everything else on the row were resolved for. `media_locale` is the language
+  # of the file behind `url`, which is the same thing until the catalog falls
+  # back — a leaf rendered in English but not yet in Dutch is watchable for a
+  # Dutch reader, in English. Keeping the two apart is what lets a caption track
+  # declare the language it is actually in, and a row say so out loud.
   Tutorial = Data.define(
     :slug, :number, :title, :scope,
     :chapter_number, :chapter_title, :subchapter_number, :subchapter_title,
     :locale, :page_key, :tab, :tracks, :status,
     :url, :poster, :captions, :version, :duration,
-    :prev_slug, :next_slug
+    :prev_slug, :next_slug, :media_locale
   ) do
+    # Defaults to `locale`, so every caller that does not care about the
+    # distinction — and every one written before it existed — keeps working and
+    # still reads a meaningful value rather than a nil.
+    def initialize(media_locale: nil, **rest)
+      super(media_locale: media_locale || rest[:locale], **rest)
+    end
+
     def watchable? = status == :watchable
     def planned? = status == :planned
+
+    # True when this plays in a language the reader did not ask for.
+    def fallback_media? = watchable? && media_locale.to_s != locale.to_s
   end
 end

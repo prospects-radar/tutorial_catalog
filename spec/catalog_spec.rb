@@ -5,12 +5,14 @@ require "spec_helper"
 # The seam every surface reads through. These assert what a caller can observe —
 # never that a file was parsed once rather than twice, or that a mutex was taken.
 RSpec.describe TutorialCatalog::Catalog do
-  def build(curriculum: "curriculum.yml", tours: "tours.yml", manifest: "manifest.json", journeys: default_journeys)
+  def build(curriculum: "curriculum.yml", tours: "tours.yml", manifest: "manifest.json",
+            journeys: default_journeys, **options)
     described_class.new(
       curriculum_path: fixture(curriculum),
       tours_path: tours && fixture(tours),
       manifest_path: manifest && fixture(manifest),
-      journeys: journeys
+      journeys: journeys,
+      **options
     )
   end
 
@@ -97,14 +99,6 @@ RSpec.describe TutorialCatalog::Catalog do
       expect(leaf.duration).to eq(170)
     end
 
-    it "is planned in a locale the manifest does not carry" do
-      leaf = build.find("published-leaf", locale: "nl")
-
-      expect(leaf).not_to be_watchable
-      expect(leaf.url).to be_nil
-      expect(leaf.duration).to be_nil
-    end
-
     it "is planned for a leaf no manifest entry names" do
       expect(build.find("planned-leaf", locale: "en")).not_to be_watchable
     end
@@ -117,6 +111,63 @@ RSpec.describe TutorialCatalog::Catalog do
       slugs = build.all(locale: "en").map(&:slug)
 
       expect(slugs).not_to include("orphan-video")
+    end
+  end
+
+  # A leaf the curriculum declares in Dutch and the manifest carries only in
+  # English plays the English file rather than reading as coming soon. Which
+  # language it ended up in is part of the value, because the surface has to say.
+  describe "the media fallback" do
+    it "plays the fallback render where the locale has none of its own" do
+      leaf = build.find("published-leaf", locale: "nl")
+
+      expect(leaf).to be_watchable
+      expect(leaf.url).to eq("/tutorials/published-leaf_en.mp4?v=abc123")
+      expect(leaf.captions).to eq("/tutorials/published-leaf_en.vtt?v=ghi789")
+      expect(leaf.duration).to eq(170)
+    end
+
+    it "reports the borrowed language beside the one it resolved for" do
+      leaf = build.find("published-leaf", locale: "nl")
+
+      expect(leaf).to have_attributes(locale: "nl", media_locale: "en", fallback_media?: true)
+    end
+
+    it "prefers the locale's own render when both exist" do
+      leaf = build.find("first-leaf", locale: "nl")
+
+      expect(leaf).to have_attributes(media_locale: "nl", fallback_media?: false)
+      expect(leaf.url).to eq("/tutorials/first-leaf_nl.mp4?v=n1")
+    end
+
+    # One-directional on purpose. English is the language every leaf is authored
+    # in first, so it is the one language that never needs to borrow — and an
+    # English reader handed Dutch narration has been given something they cannot
+    # follow, which is not the same trade as the other way round.
+    it "never borrows in the other direction" do
+      leaf = build.find("no-dutch-title", locale: "en")
+
+      expect(leaf).not_to be_watchable
+      expect(leaf.url).to be_nil
+    end
+
+    it "says the reader's own locale on a leaf with no file at all" do
+      leaf = build.find("planned-leaf", locale: "nl")
+
+      expect(leaf).to have_attributes(media_locale: "nl", fallback_media?: false)
+    end
+
+    it "leaves the leaf planned when the fallback is turned off" do
+      leaf = build(fallback_locale: nil).find("published-leaf", locale: "nl")
+
+      expect(leaf).not_to be_watchable
+      expect(leaf.media_locale).to eq("nl")
+    end
+
+    it "borrows from whichever locale it is pointed at" do
+      leaf = build(fallback_locale: "nl").find("no-dutch-title", locale: "en")
+
+      expect(leaf).to have_attributes(media_locale: "nl", fallback_media?: true)
     end
   end
 
