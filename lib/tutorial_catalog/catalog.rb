@@ -216,6 +216,7 @@ module TutorialCatalog
         captions: entry && entry["captions"],
         version: entry && entry["version"],
         duration: entry && entry["duration"],
+        references: entry ? Array(entry["references"]) : [],
         prev_slug: prev_slug,
         next_slug: next_slug
       )

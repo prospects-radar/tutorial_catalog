@@ -15,7 +15,8 @@
         "version": "abc123",
         "duration": 170,
         "poster": "/tutorials/published-leaf_en.png?v=def456",
-        "captions": "/tutorials/published-leaf_en.vtt?v=ghi789"
+        "captions": "/tutorials/published-leaf_en.vtt?v=ghi789",
+        "references": [{ "slug": "first-leaf", "at": 27.44, "until": 42.56 }]
       }
     },
     "no-duration": {

@@ -107,6 +107,23 @@ RSpec.describe TutorialCatalog::Catalog do
       expect(build.find("no-duration", locale: "en")).to have_attributes(watchable?: true, duration: nil)
     end
 
+    # Where this video hands off to another, and when in its own timeline. The
+    # seconds belong to the FILE, so on a borrowed render they are the fallback
+    # locale's — which is right, because those are the seconds the sentence is
+    # spoken at.
+    it "carries the handoff windows the render measured" do
+      expect(build.find("published-leaf", locale: "en").references)
+        .to eq([ { "slug" => "first-leaf", "at" => 27.44, "until" => 42.56 } ])
+    end
+
+    it "gives a video that points nowhere an empty list rather than a nil" do
+      expect(build.find("first-leaf", locale: "en").references).to eq([])
+    end
+
+    it "gives a planned leaf an empty list, having no file to have measured" do
+      expect(build.find("planned-leaf", locale: "en").references).to eq([])
+    end
+
     it "ignores a manifest entry with no matching leaf" do
       slugs = build.all(locale: "en").map(&:slug)
 

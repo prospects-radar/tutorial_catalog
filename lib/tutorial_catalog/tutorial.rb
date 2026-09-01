@@ -15,6 +15,12 @@ module TutorialCatalog
   # video is watchable — and `poster`, `captions` and `duration` may be nil even
   # then, because the publish step only records what it actually found.
   #
+  # `references` is the other leaves this one hands off to, each with the window
+  # in THIS file's timeline where the handoff is spoken:
+  # `[{ "slug" => ..., "at" => 27.44, "until" => 42.56 }]`. Empty for a video
+  # that points at nothing, which is nearly all of them. The seconds belong to
+  # the rendered file, so on a borrowed render they are the fallback locale's.
+  #
   # `locale` is the reader's language: the one the title, the chapter label and
   # everything else on the row were resolved for. `media_locale` is the language
   # of the file behind `url`, which is the same thing until the catalog falls
@@ -26,13 +32,13 @@ module TutorialCatalog
     :chapter_number, :chapter_title, :subchapter_number, :subchapter_title,
     :locale, :page_key, :tab, :tracks, :status,
     :url, :poster, :captions, :version, :duration,
-    :prev_slug, :next_slug, :media_locale
+    :prev_slug, :next_slug, :media_locale, :references
   ) do
     # Defaults to `locale`, so every caller that does not care about the
     # distinction — and every one written before it existed — keeps working and
     # still reads a meaningful value rather than a nil.
-    def initialize(media_locale: nil, **rest)
-      super(media_locale: media_locale || rest[:locale], **rest)
+    def initialize(media_locale: nil, references: nil, **rest)
+      super(media_locale: media_locale || rest[:locale], references: references || [], **rest)
     end
 
     def watchable? = status == :watchable
