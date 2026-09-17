@@ -18,11 +18,17 @@ module TutorialCatalog
   # read tries again. A truncated file is an ordinary artifact of writing over a
   # live mount: briefly showing a landing video as planned beats a 500 on every
   # page that has a help menu.
+  #
+  # A path File cannot even ask about also yields zero videos. It is a mistake
+  # in whoever built the catalog, and the object cannot change under the
+  # process, so it goes to the malformed callback once (again after reload!)
+  # and File is never asked about it after construction.
   class Manifest
     Stat = Struct.new(:mtime, :size)
 
     def initialize(path, on_absent: nil, on_malformed: nil)
       @path = path
+      @path_error = path_error(path)
       @on_absent = on_absent
       @on_malformed = on_malformed
       @mutex = Mutex.new
@@ -32,6 +38,8 @@ module TutorialCatalog
     # { "slug" => { "en" => { "url" => ..., "duration" => 170 } } }
     def videos
       @mutex.synchronize do
+        next unusable if @path_error
+
         current = stat
         next @videos if @loaded && current == @loaded_stat
 
@@ -65,6 +73,19 @@ module TutorialCatalog
       @loaded_stat = nil
       @announced_absent = false
       @announced_malformed_stat = nil
+      @announced_unusable = false
+    end
+
+    # File.exist? raises instead of answering false for anything that is
+    # neither a String nor a to_path returning one, such as the empty
+    # OrderedOptions an unset Rails `config.x` key hands back (TypeError), and
+    # for a String holding a NUL byte (ArgumentError). Whether it raises depends
+    # only on the object, so this is asked once.
+    def path_error(path)
+      File.exist?(path) unless path.nil?
+      nil
+    rescue TypeError, ArgumentError => e
+      e
     end
 
     def stat
@@ -95,6 +116,14 @@ module TutorialCatalog
 
       @announced_malformed_stat = current
       @on_malformed&.call(@path, error)
+    end
+
+    def unusable
+      unless @announced_unusable
+        @announced_unusable = true
+        @on_malformed&.call(@path, @path_error)
+      end
+      {}.freeze
     end
 
     def absent

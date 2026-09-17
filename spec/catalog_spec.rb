@@ -551,6 +551,41 @@ RSpec.describe TutorialCatalog::Catalog do
 
     # The retry is the point: a truncated file is an ordinary artifact of
     # writing over a live mount, so the next read has to see the finished one.
+    # 2026-09-04 (prospects_radar#1099): an unset Rails `config.x` key answers
+    # with an empty OrderedOptions, whose to_path returns nil. It reached
+    # File.exist? and every page with a help menu returned 500 for twelve
+    # minutes. A path File cannot even ask about now yields zero videos and is
+    # reported through the malformed callback.
+    describe "built with a path that is not a path" do
+      let(:unset_setting) { Class.new { def to_path = nil }.new }
+      let(:announced) { [] }
+      let(:catalog) do
+        described_class.new(
+          curriculum_path: fixture("curriculum.yml"), tours_path: nil,
+          manifest_path: unset_setting, journeys: {},
+          on_manifest_malformed: ->(path, error) { announced << [ path, error ] }
+        )
+      end
+
+      it "reports zero watchable videos rather than raising" do
+        expect(catalog.all(locale: "en")).to all(satisfy { |t| !t.watchable? })
+      end
+
+      it "says so once, however often it is asked" do
+        3.times { catalog.all(locale: "en") }
+
+        expect(announced.size).to eq(1)
+        expect(announced.first).to match([ unset_setting, an_instance_of(TypeError) ])
+      end
+
+      it "treats a path holding a NUL byte the same way" do
+        catalog = described_class.new(curriculum_path: fixture("curriculum.yml"), tours_path: nil,
+                                      manifest_path: "manifest\0.json", journeys: {})
+
+        expect(catalog.all(locale: "en")).to all(satisfy { |t| !t.watchable? })
+      end
+    end
+
     it "picks up the file once it is written properly" do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "manifest.json")
