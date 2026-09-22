@@ -1,0 +1,44 @@
+# A curriculum where one page has said which of its leaves matter most on it,
+# and another page anchoring the same leaves has said nothing.
+#
+# `second` and `third` are ranked out of course order deliberately, and `first`
+# is left unranked, so a result in course order and a result in rank order
+# cannot be mistaken for each other.
+---
+version: 1
+default_locales:
+- en
+chapters:
+- number: 1
+  title: Only chapter
+  subchapters:
+  - number: '1.1'
+    title: Only subchapter
+    leaves:
+    - number: 1.1.1
+      slug: first-leaf
+      title:
+        en: First leaf
+      scope: Anchored to both pages, ranked on neither.
+      pages:
+      - route: prospects#show
+      - route: prospects#index
+    - number: 1.1.2
+      slug: second-leaf
+      title:
+        en: Second leaf
+      scope: The second thing to watch on the prospect page.
+      pages:
+      - route: prospects#show
+        rank: 2
+        tab: team
+      - route: prospects#index
+    - number: 1.1.3
+      slug: third-leaf
+      title:
+        en: Third leaf
+      scope: The first thing to watch on the prospect page, third in the course.
+      pages:
+      - route: prospects#show
+        rank: 1
+      - route: prospects#index

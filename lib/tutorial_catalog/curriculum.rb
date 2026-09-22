@@ -137,12 +137,26 @@ module TutorialCatalog
     # be added later without a curriculum migration, but it never narrows —
     # a URL fragment is not sent to the server, so the request for a tabbed page
     # is byte-identical whichever tab is showing.
+    #
+    # `rank` is the anchor's claim about importance ON THIS PAGE, for a surface
+    # with room for a few leaves rather than all of them. It belongs to the
+    # anchor rather than to the leaf because the same video can be the first
+    # thing to watch on one page and a footnote on another.
     def anchors(leaf)
       Array(leaf["pages"]).filter_map do |page|
         next unless page.is_a?(Hash) && page["route"]
 
-        { route: page["route"].to_s, tab: page["tab"]&.to_s }
+        { route: page["route"].to_s, tab: page["tab"]&.to_s, rank: rank(page["rank"]) }
       end.freeze
+    end
+
+    # Unranked is not last-ranked: it means the page never made a claim, and
+    # course order is left to decide. Anything that is not a whole number is
+    # nothing said at all rather than a zero.
+    def rank(value)
+      return nil unless value.to_s.match?(/\A\d+\z/)
+
+      value.to_i
     end
 
     def stringify(titles)

@@ -131,6 +131,56 @@ RSpec.describe TutorialCatalog::Catalog do
     end
   end
 
+  # The poster at row size. A `?` menu showing four frames beside four titles
+  # would otherwise pull two megabytes of picture for 40px of screen, which is
+  # the whole reason it is a separate field from the poster.
+  describe "the row-sized frame" do
+    it "carries the thumb the publish step recorded" do
+      expect(build.find("published-leaf", locale: "en").thumb)
+        .to eq("/tutorials/published-leaf_en_thumb.webp?v=jkl012")
+    end
+
+    it "is nil where the publish step recorded none" do
+      expect(build.find("first-leaf", locale: "en").thumb).to be_nil
+    end
+
+    it "is nil for a planned leaf, there being no file to have framed" do
+      expect(build.find("planned-leaf", locale: "en").thumb).to be_nil
+    end
+  end
+
+  # A page with room for three of its nine leaves has to be able to say which
+  # three. The claim is on the anchor rather than on the leaf, because the same
+  # video can be the first thing to watch on one page and a footnote on another.
+  describe "#for_page ordering" do
+    def ranked = build(curriculum: "ranked_curriculum.yml", tours: nil)
+
+    it "puts the page's own order first where the page stated one" do
+      slugs = ranked.for_page("prospects#show", locale: "en").map(&:slug)
+
+      expect(slugs).to eq(%w[third-leaf second-leaf first-leaf])
+    end
+
+    # The same three leaves, anchored to a page that ranked none of them.
+    it "leaves a page that stated nothing in course order" do
+      slugs = ranked.for_page("prospects#index", locale: "en").map(&:slug)
+
+      expect(slugs).to eq(%w[first-leaf second-leaf third-leaf])
+    end
+
+    # Unranked is the page declining to have an opinion, not the page saying
+    # "last" — so course order decides among them, after the ranked ones.
+    it "keeps the unranked in course order behind the ranked" do
+      slugs = ranked.for_page("prospects#show", locale: "en").map(&:slug)
+
+      expect(slugs.last).to eq("first-leaf")
+    end
+
+    it "carries the tab the anchor named" do
+      expect(ranked.for_page("prospects#show", locale: "en").map(&:tab).compact).to eq([ "team" ])
+    end
+  end
+
   # A leaf the curriculum declares in Dutch and the manifest carries only in
   # English plays the English file rather than reading as coming soon. Which
   # language it ended up in is part of the value, because the surface has to say.

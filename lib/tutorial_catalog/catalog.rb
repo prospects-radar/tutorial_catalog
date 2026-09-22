@@ -59,18 +59,24 @@ module TutorialCatalog
       end.freeze
     end
 
-    # Tutorials anchored to a page, in course order.
+    # Tutorials anchored to a page, most useful on that page first.
     #
     # `page_key` is a plain "controller#action" — what a framework produces and
     # what the curriculum stores, byte for byte. A `tab:` qualifier rides along
     # on the returned value but never narrows the match: the fragment that
     # selects a tab is not sent to the server.
+    #
+    # Order is the page's own claim where it made one, and course order where it
+    # did not. A page with room for three of its nine leaves needs to say which
+    # three, and the same leaf can be the first thing to watch on one page and a
+    # footnote on another — which is why the rank is on the anchor rather than on
+    # the leaf. A page that ranked nothing is unchanged: course order throughout.
     def for_page(page_key, locale:, track: nil)
       key = page_key.to_s
       routes = anchor_routes
       anchored = resolved(locale.to_s).select { |tutorial| routes.fetch(tutorial.slug, EMPTY_ROUTES).include?(key) }
 
-      narrow(anchored, track).freeze
+      by_rank(narrow(anchored, track), key).freeze
     end
 
     # What a library page shows: the whole curriculum, or what teaches one page,
@@ -126,6 +132,33 @@ module TutorialCatalog
     # renumber the course: a leaf's `prev_slug` and `next_slug` still point at
     # its whole-course neighbours, so following them out of a track is possible,
     # and leaving the track is what a reader means by "next".
+    # Ranked leaves first, in the order the page asked for; everything the page
+    # said nothing about after them, in course order. Unranked is not
+    # last-ranked in the sense of being demoted — it is the page declining to
+    # have an opinion, and course order is the answer to that.
+    #
+    # `sort_by` with the index as a tiebreak rather than a bare sort: Ruby's
+    # sort is not stable, and course order among the unranked is the whole point
+    # of leaving them unranked.
+    def by_rank(tutorials, page_key)
+      ranks = anchor_ranks(page_key)
+
+      tutorials.each_with_index.sort_by do |tutorial, index|
+        [ ranks[tutorial.slug] || Float::INFINITY, index ]
+      end.map(&:first)
+    end
+
+    # What each leaf's anchor ON THIS PAGE claimed, for the leaves that claimed
+    # anything. A leaf anchored to the page more than once takes its first
+    # ranked anchor, because two ranks for one page is an authoring mistake and
+    # the first is as good an answer as any.
+    def anchor_ranks(page_key)
+      @curriculum.leaves.each_with_object({}) do |leaf, ranks|
+        anchor = leaf[:anchors].find { |candidate| candidate[:route] == page_key && candidate[:rank] }
+        ranks[leaf[:slug]] = anchor[:rank] if anchor
+      end
+    end
+
     def narrow(tutorials, track)
       wanted = track.to_s
       return tutorials if wanted == ""
@@ -213,6 +246,7 @@ module TutorialCatalog
         status: entry ? :watchable : :planned,
         url: entry && entry["url"],
         poster: entry && entry["poster"],
+        thumb: entry && entry["thumb"],
         captions: entry && entry["captions"],
         version: entry && entry["version"],
         duration: entry && entry["duration"],
